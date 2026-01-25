@@ -1,0 +1,33 @@
+# FastAPI and server
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+gunicorn==23.0.0
+
+# Streamlit dashboard
+streamlit==1.40.0
+plotly==5.24.1
+
+# Data processing
+# pandas 2.2.3+ has Python 3.13 prebuilt wheels (released Sept 2024)
+pandas==2.2.3
+# numpy 2.1.1+ has Python 3.13 wheels and maintains compatibility with pandas
+numpy==2.1.1
+
+# HTTP requests
+requests==2.32.3
+
+# Environment variables
+python-dotenv==1.0.1
+
+# Database connections
+sqlalchemy==2.0.36
+pymysql==1.1.1
+
+# Snowflake
+snowflake-connector-python==3.12.0
+
+# Machine learning and forecasting
+# scikit-learn 1.5.2+ compatible with numpy 2.1+ and Python 3.13
+scikit-learn==1.5.2
+# statsmodels 0.14.2+ compatible with numpy 2.1+ and Python 3.13
+statsmodels==0.14.2
