@@ -10,10 +10,8 @@ services:
         value: 8501
       - key: ENVIRONMENT
         value: production
-      # Update API_URL to your deployed API URL (or leave as localhost if API is on same service)
+      # API URL - update this to your deployed API URL
       - key: API_URL
         value: http://localhost:8000
-      # Note: Add Snowflake credentials in Render dashboard → Environment tab
-      # SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_PASSWORD, etc.
     healthCheckPath: /_stcore/health
     autoDeploy: true
