@@ -1,4 +1,39 @@
 services:
+  # ============================================
+  # FastAPI Backend (deploy this FIRST)
+  # ============================================
+  - type: web
+    name: smartphone-intelligence-api
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile.api
+    dockerContext: .
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: ENVIRONMENT
+        value: production
+      # Snowflake credentials - SET THESE IN RENDER DASHBOARD
+      - key: SNOWFLAKE_ACCOUNT
+        sync: false
+      - key: SNOWFLAKE_USER
+        sync: false
+      - key: SNOWFLAKE_PASSWORD
+        sync: false
+      - key: SNOWFLAKE_WAREHOUSE
+        sync: false
+      - key: SNOWFLAKE_DATABASE
+        sync: false
+      - key: SNOWFLAKE_SCHEMA
+        value: PUBLIC
+      - key: SNOWFLAKE_ROLE
+        sync: false
+    healthCheckPath: /health
+    autoDeploy: true
+
+  # ============================================
+  # Streamlit Dashboard (deploy AFTER API is live)
+  # ============================================
   - type: web
     name: smartphone-intelligence-dashboard
     env: docker
@@ -10,10 +45,9 @@ services:
         value: 8501
       - key: ENVIRONMENT
         value: production
-      # Update API_URL to your deployed API URL (or leave as localhost if API is on same service)
+      # IMPORTANT: Update this to your deployed API URL after API is live
+      # Example: https://smartphone-intelligence-api.onrender.com
       - key: API_URL
-        value: http://localhost:8000
-      # Note: Add Snowflake credentials in Render dashboard → Environment tab
-      # SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_PASSWORD, etc.
+        sync: false
     healthCheckPath: /_stcore/health
     autoDeploy: true

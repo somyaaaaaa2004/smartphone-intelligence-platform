@@ -22,8 +22,9 @@ COPY requirements.txt .
 
 # Upgrade pip and install Python dependencies
 # Use --prefer-binary to avoid compiling from source when possible
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir --prefer-binary -r requirements.txt
+# --root-user-action=ignore suppresses the root user warning (safe in Docker)
+RUN pip install --no-cache-dir --root-user-action=ignore --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir --root-user-action=ignore --prefer-binary -r requirements.txt
 
 # Copy application code
 COPY . .

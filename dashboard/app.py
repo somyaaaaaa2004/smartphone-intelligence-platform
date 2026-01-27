@@ -12,8 +12,22 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# API base URL - can be set via environment variable for deployment
-API_BASE_URL = os.getenv("API_URL", "http://localhost:8000")
+# API base URL - MUST be set via environment variable in production
+API_BASE_URL = os.getenv("API_URL", "").strip()
+
+# Detect if running in production (no localhost allowed)
+IS_PRODUCTION = os.getenv("ENVIRONMENT", "development").lower() == "production"
+
+# Validate API URL
+if not API_BASE_URL:
+    if IS_PRODUCTION:
+        API_BASE_URL = None  # Will show warning in UI
+    else:
+        API_BASE_URL = "http://localhost:8000"  # Local development default
+
+# Helper to check if API is configured
+def is_api_configured():
+    return API_BASE_URL is not None and API_BASE_URL != ""
 
 
 def fetch_macro_indicators(country_code):
@@ -21,6 +35,8 @@ def fetch_macro_indicators(country_code):
     Fetch macro indicators for a country from Snowflake API.
     Returns live data from Snowflake (no caching for real-time updates).
     """
+    if not is_api_configured():
+        return None
     try:
         response = requests.get(f"{API_BASE_URL}/macro/{country_code}", timeout=10)
         if response.status_code == 200:
@@ -42,6 +58,8 @@ def fetch_companies():
     Fetch company financials from Snowflake API.
     Returns live data from Snowflake (no caching for real-time updates).
     """
+    if not is_api_configured():
+        return None
     try:
         response = requests.get(f"{API_BASE_URL}/companies", timeout=10)
         if response.status_code == 200:
@@ -62,6 +80,8 @@ def fetch_forecasts(company):
     Returns live data from Snowflake (no caching for real-time updates).
     Returns None if no forecasts available or on error.
     """
+    if not is_api_configured():
+        return None
     try:
         response = requests.get(f"{API_BASE_URL}/forecasts/{company}", timeout=10)
         if response.status_code == 200:
@@ -276,12 +296,14 @@ def create_gdp_chart(selected_indicator):
         bra_data = fetch_macro_indicators("BRA")
     
     if not ind_data or not bra_data:
-        st.error(f"⚠️ Unable to fetch {selected_indicator} data from API.")
-        st.info("**Troubleshooting:**\n"
-                "- Ensure the FastAPI server is running on port 8000\n"
-                "- Check that Snowflake connection is configured\n"
-                "- Verify data has been loaded into Snowflake\n"
-                f"- API URL: {API_BASE_URL}")
+        st.warning(f"⚠️ Unable to fetch {selected_indicator} data from API.")
+        if not is_api_configured():
+            st.error("**API Not Configured:** Set the `API_URL` environment variable to your deployed FastAPI backend URL.")
+        else:
+            st.info("**Troubleshooting:**\n"
+                    "- Ensure the FastAPI backend is deployed and running\n"
+                    "- Check that Snowflake connection is configured\n"
+                    "- Verify data has been loaded into Snowflake")
         return
     
     try:
@@ -391,12 +413,14 @@ def create_revenue_chart():
         companies_data = fetch_companies()
     
     if not companies_data:
-        st.error("⚠️ Unable to fetch company revenue data from API.")
-        st.info("**Troubleshooting:**\n"
-                "- Ensure the FastAPI server is running on port 8000\n"
-                "- Check that Snowflake connection is configured\n"
-                "- Verify COMPANY_FINANCIALS table has data in Snowflake\n"
-                f"- API URL: {API_BASE_URL}")
+        st.warning("⚠️ Unable to fetch company revenue data from API.")
+        if not is_api_configured():
+            st.error("**API Not Configured:** Set the `API_URL` environment variable to your deployed FastAPI backend URL.")
+        else:
+            st.info("**Troubleshooting:**\n"
+                    "- Ensure the FastAPI backend is deployed and running\n"
+                    "- Check that Snowflake connection is configured\n"
+                    "- Verify COMPANY_FINANCIALS table has data in Snowflake")
         return
     
     try:
@@ -499,11 +523,13 @@ def create_forecast_chart(selected_company):
     
     if not forecasts_data or (isinstance(forecasts_data, dict) and forecasts_data.get('count', 0) == 0):
         st.warning(f"⚠️ No forecasts available for {selected_company}.")
-        st.info("**To generate forecasts:**\n"
-                "1. Ensure company financial data exists in Snowflake\n"
-                "2. Run the forecasting pipeline: `python -m forecasting.run_forecasts`\n"
-                "3. Note: Forecasts are saved to MySQL. You may need to migrate them to Snowflake.\n"
-                f"4. Verify API endpoint: {API_BASE_URL}/forecasts/{selected_company}")
+        if not is_api_configured():
+            st.error("**API Not Configured:** Set the `API_URL` environment variable to your deployed FastAPI backend URL.")
+        else:
+            st.info("**To generate forecasts:**\n"
+                    "1. Ensure company financial data exists in Snowflake\n"
+                    "2. Run the forecasting pipeline: `python -m forecasting.run_forecasts`\n"
+                    "3. Migrate forecasts from MySQL to Snowflake if needed")
         return
     
     try:
@@ -675,40 +701,45 @@ def main():
     st.sidebar.markdown("---")
     st.sidebar.markdown("### API Status")
     
-    # Check API health with loading indicator
-    with st.sidebar.spinner("Checking API status..."):
-        try:
-            health_response = requests.get(f"{API_BASE_URL}/health", timeout=5)
-            if health_response.status_code == 200:
-                health_data = health_response.json()
-                st.sidebar.success("✅ API Connected")
-                
-                # Show database status
-                if 'databases' in health_data:
-                    db_status = health_data['databases']
-                    if 'snowflake' in db_status:
-                        if db_status['snowflake'] == 'connected':
-                            st.sidebar.success("✅ Snowflake Connected")
-                        else:
-                            st.sidebar.warning(f"⚠️ Snowflake: {db_status.get('snowflake', 'unknown')}")
-                            if 'snowflake_error' in db_status:
-                                st.sidebar.caption(f"Error: {db_status['snowflake_error'][:50]}...")
-            else:
-                st.sidebar.error("❌ API Error")
-                st.sidebar.caption(f"Status: {health_response.status_code}")
-        except requests.exceptions.Timeout:
-            st.sidebar.error("❌ API Timeout")
-            st.sidebar.caption("API did not respond in time")
-        except requests.exceptions.ConnectionError:
-            st.sidebar.error("❌ API Unavailable")
-            st.sidebar.caption(f"Cannot connect to {API_BASE_URL}")
-        except Exception as e:
-            st.sidebar.error("❌ API Check Failed")
-            st.sidebar.caption(f"Error: {str(e)[:50]}")
-    
-    st.sidebar.markdown("---")
-    st.sidebar.markdown(f"**API URL:**\n`{API_BASE_URL}`")
-    st.sidebar.caption("All data is fetched live from Snowflake via API")
+    # Check if API is configured
+    if not is_api_configured():
+        st.sidebar.error("❌ API Not Configured")
+        st.sidebar.warning("Set `API_URL` environment variable in Render dashboard")
+        st.sidebar.caption("Example: `https://your-api.onrender.com`")
+    else:
+        # Check API health with loading indicator
+        with st.sidebar.spinner("Checking API status..."):
+            try:
+                health_response = requests.get(f"{API_BASE_URL}/health", timeout=5)
+                if health_response.status_code == 200:
+                    health_data = health_response.json()
+                    st.sidebar.success("✅ API Connected")
+                    
+                    # Show database status
+                    if 'databases' in health_data:
+                        db_status = health_data['databases']
+                        if 'snowflake' in db_status:
+                            if db_status['snowflake'] == 'connected':
+                                st.sidebar.success("✅ Snowflake Connected")
+                            else:
+                                st.sidebar.warning(f"⚠️ Snowflake: {db_status.get('snowflake', 'unknown')}")
+                                if 'snowflake_error' in db_status:
+                                    st.sidebar.caption(f"Error: {db_status['snowflake_error'][:50]}...")
+                else:
+                    st.sidebar.error("❌ API Error")
+                    st.sidebar.caption(f"Status: {health_response.status_code}")
+            except requests.exceptions.Timeout:
+                st.sidebar.error("❌ API Timeout")
+                st.sidebar.caption("API did not respond in time")
+            except requests.exceptions.ConnectionError:
+                st.sidebar.error("❌ API Unavailable")
+                st.sidebar.caption("Cannot connect to API backend")
+            except Exception as e:
+                st.sidebar.error("❌ API Check Failed")
+                st.sidebar.caption(f"Error: {str(e)[:50]}")
+        
+        st.sidebar.markdown("---")
+        st.sidebar.caption(f"**API:** `{API_BASE_URL}`")
     
     # Comparison Charts Section
     st.markdown("---")
@@ -728,8 +759,10 @@ def main():
     
     # Footer
     st.markdown("---")
-    st.caption("📊 **Live Data Source:** Smartphone Intelligence Platform API → Snowflake | Data updates in real-time")
-    st.caption(f"🔗 API Endpoint: `{API_BASE_URL}` | All charts reflect current Snowflake data")
+    if is_api_configured():
+        st.caption("📊 **Live Data Source:** Smartphone Intelligence Platform API → Snowflake | Data updates in real-time")
+    else:
+        st.caption("⚠️ **API Not Configured** - Set `API_URL` environment variable to enable live data")
 
 
 if __name__ == "__main__":
