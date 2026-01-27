@@ -1,24 +1,29 @@
 # Dockerfile for Streamlit Dashboard on Render
-FROM python:3.13-slim
+# Use Python 3.11 for best wheel compatibility
+FROM python:3.11-slim
 
 # Set working directory
 WORKDIR /app
 
 # Install system dependencies required for building Python packages
-# gcc, g++ are needed for snowflake-connector-python and other packages
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
     build-essential \
     curl \
-    && rm -rf /var/lib/apt/lists/*
+    libffi-dev \
+    libssl-dev \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
 # Copy requirements first for better Docker layer caching
 COPY requirements.txt .
 
 # Upgrade pip and install Python dependencies
+# Use --prefer-binary to avoid compiling from source when possible
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir --prefer-binary -r requirements.txt
 
 # Copy application code
 COPY . .
