@@ -47,7 +47,7 @@ services:
         value: production
       # IMPORTANT: Update this to your deployed API URL after API is live
       # Example: https://smartphone-intelligence-api.onrender.com
-      - key: API_URL
+      - key: BACKEND_API_URL
         sync: false
     healthCheckPath: /_stcore/health
     autoDeploy: true

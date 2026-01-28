@@ -66,7 +66,7 @@ Visit these URLs in your browser:
 |----------|-------|
 | `PORT` | `8501` |
 | `ENVIRONMENT` | `production` |
-| `API_URL` | `https://smartphone-intelligence-api.onrender.com` ← **YOUR API URL FROM STEP 2** |
+| `BACKEND_API_URL` | `https://smartphone-intelligence-api.onrender.com` ← **YOUR API URL FROM STEP 2** |
 
 6. Click **"Create Web Service"**
 7. Wait for deployment to complete
@@ -103,15 +103,15 @@ SNOWFLAKE_ROLE=SMARTPHONE_ROLE
 ```
 PORT=8501
 ENVIRONMENT=production
-API_URL=https://smartphone-intelligence-api.onrender.com
+BACKEND_API_URL=https://smartphone-intelligence-api.onrender.com
 ```
 
 ---
 
 ## Troubleshooting
 
-### Dashboard shows "API Not Configured"
-→ Set `API_URL` environment variable in Render dashboard for the Dashboard service
+### Dashboard shows "API Not Configured" or "API Unavailable"
+→ Set `BACKEND_API_URL` environment variable in Render dashboard for the Dashboard service
 
 ### Dashboard shows "API Unavailable"
 → The API service is not running or has errors. Check API service logs in Render.

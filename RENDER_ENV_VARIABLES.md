@@ -30,9 +30,9 @@ You need **TWO services** on Render. Each has different environment variables.
 |--------------|---------------|----------|
 | `PORT` | `8501` | Yes |
 | `ENVIRONMENT` | `production` | Yes |
-| `API_URL` | `https://smartphone-intelligence-api.onrender.com` | **Yes** |
+| `BACKEND_API_URL` | `https://smartphone-intelligence-api.onrender.com` | **Yes** |
 
-**Important:** The `API_URL` must point to your deployed API service URL!
+**Important:** The `BACKEND_API_URL` must point to your deployed API service URL!
 
 ---
 

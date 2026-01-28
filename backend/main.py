@@ -210,12 +210,23 @@ def validate_environment_variables():
         raise ValueError(error_msg)
 
 
+# Configure logging for production
+import logging
+log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+if os.getenv("ENVIRONMENT", "").lower() == "production":
+    log_level = "INFO"  # Force INFO in production
+logging.basicConfig(
+    level=getattr(logging, log_level, logging.INFO),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 # Validate environment variables on startup
 try:
     validate_environment_variables()
-    print("✓ Environment variables validated successfully")
+    logger.info("Environment variables validated successfully")
 except ValueError as e:
-    print(str(e))
+    logger.error(str(e))
     raise
 
 app = FastAPI(title="Smartphone Intelligence Platform API", version="1.0.0")
@@ -223,9 +234,9 @@ app = FastAPI(title="Smartphone Intelligence Platform API", version="1.0.0")
 # Initialize Snowflake connection pool
 try:
     snowflake_pool = SnowflakeConnectionPool(max_connections=5)
-    print("✓ Snowflake connection pool initialized")
+    logger.info("Snowflake connection pool initialized")
 except Exception as e:
-    print(f"✗ Error initializing Snowflake connection pool: {str(e)}")
+    logger.error(f"Error initializing Snowflake connection pool: {str(e)}")
     raise
 
 
@@ -519,9 +530,9 @@ async def shutdown_event():
     """Clean up connection pool on shutdown."""
     try:
         snowflake_pool.close_all()
-        print("✓ Snowflake connection pool closed")
+        logger.info("Snowflake connection pool closed")
     except Exception as e:
-        print(f"⚠ Warning: Error closing connection pool: {str(e)}")
+        logger.warning(f"Error closing connection pool: {str(e)}")
 
 
 if __name__ == "__main__":
