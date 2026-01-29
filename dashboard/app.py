@@ -467,13 +467,18 @@ def get_revenue_timeseries_data() -> tuple:
     Get company revenue time series data with API-first approach and fallback.
     
     Returns:
-        tuple: (apple_df, samsung_df, is_fallback) - DataFrames for Apple and Samsung, and fallback flag
+        tuple: (apple_df, samsung_df, is_fallback, reason) - DataFrames, fallback flag, and reason
     """
     # Try to fetch from API
     try:
         companies_data = fetch_companies()
         
-        if companies_data and 'data' in companies_data:
+        # Check if API call succeeded
+        if companies_data is None:
+            # API connection failed
+            logger.warning("Revenue chart: API connection failed - using fallback")
+            reason = "connection_failed"
+        elif companies_data and 'data' in companies_data:
             df = pd.DataFrame(companies_data['data'])
             
             # Normalize column names
@@ -495,16 +500,20 @@ def get_revenue_timeseries_data() -> tuple:
                 
                 if not apple_df.empty and not samsung_df.empty:
                     logger.info("Revenue chart: Fetched data from API successfully")
-                    return apple_df, samsung_df, False
+                    return apple_df, samsung_df, False, None
                 else:
                     logger.warning("Revenue chart: One or both companies missing from API data")
+                    reason = "missing_companies"
             else:
                 logger.warning(f"Revenue chart: Missing required columns. Has: {list(df.columns) if not df.empty else 'empty'}")
+                reason = "invalid_data_format"
         else:
-            logger.warning("Revenue chart: API returned empty or invalid data")
+            logger.warning("Revenue chart: API returned empty response")
+            reason = "empty_response"
     
     except Exception as e:
         logger.error(f"Revenue chart: Exception fetching data - {str(e)}")
+        reason = "exception"
     
     # Use fallback data
     logger.info("Revenue chart: Using fallback revenue time series data")
@@ -524,7 +533,7 @@ def get_revenue_timeseries_data() -> tuple:
         "net_income_usd": [None] * len(years)  # No fallback for net income
     })
     
-    return apple_df, samsung_df, True
+    return apple_df, samsung_df, True, reason
 
 
 def generate_linear_forecast(historical_df: pd.DataFrame, company: str, forecast_years: int = 5) -> pd.DataFrame:
@@ -608,7 +617,7 @@ def get_forecast_data(company: str) -> tuple:
     forecasts_data = fetch_forecasts(company)
     
     # Get historical data (needed for both API and fallback)
-    apple_df, samsung_df, hist_is_fallback = get_revenue_timeseries_data()
+    apple_df, samsung_df, hist_is_fallback, _ = get_revenue_timeseries_data()
     historical_df = apple_df if company == "Apple" else samsung_df
     
     # Check if API returned valid forecast data
@@ -773,7 +782,12 @@ def _render_kpi_card(kpi_type: str, label_override: str = None):
     
     formatted_value = format_kpi_value(value)
     delta_value = f"{growth:.1f}%" if growth is not None else None
-    help_text = "Live data from API" if source == "api" else "Using cached data (API unavailable)"
+    # Keep wording calm and production-ready
+    help_text = (
+        "Live data from API"
+        if source == "api"
+        else "Using latest cached data (most recent values)"
+    )
     
     st.metric(
         label=label,
@@ -834,9 +848,12 @@ def create_gdp_chart(selected_indicator):
                 "For other indicators, please ensure the API is running.")
         return
     
-    # Show fallback notice if using cached data
+    # Show fallback notice if using cached data (calm, informational tone)
     if is_fallback:
-        st.info("📊 **Using cached data** — API unavailable. Showing historical GDP estimates (2018-2024).")
+        st.info(
+            "📊 Showing latest available GDP data "
+            "(historical estimates, 2018–2024)."
+        )
     
     # Create plotly chart
     fig = go.Figure()
@@ -923,7 +940,8 @@ def create_revenue_chart():
     
     # Fetch data with fallback support
     with st.spinner("Loading company revenue data..."):
-        apple_df, samsung_df, is_fallback = get_revenue_timeseries_data()
+        result = get_revenue_timeseries_data()
+        apple_df, samsung_df, is_fallback, reason = result
     
     # Defensive: Ensure we have valid dataframes
     if apple_df is None or samsung_df is None or apple_df.empty or samsung_df.empty:
@@ -937,9 +955,20 @@ def create_revenue_chart():
         st.error("Revenue data missing required columns.")
         return
     
-    # Show fallback info badge (less alarming than warning)
+    # Show appropriate message based on fallback reason
     if is_fallback:
-        st.info("📊 **Using cached data** — API unavailable. Showing historical revenue estimates (2019-2023).")
+        api_url = get_api_base_url()
+        if reason == "connection_failed":
+            st.info("📊 **Using cached data** — Could not connect to API. Showing historical revenue estimates (2019-2023).")
+            st.caption(f"API endpoint: `{api_url}/companies` — Check backend service is running.")
+        elif reason == "empty_response":
+            st.info("📊 **Using cached data** — API returned no data. Showing historical revenue estimates (2019-2023).")
+            st.caption(f"Backend may not have company data loaded. Check Snowflake `COMPANY_FINANCIALS` table.")
+        elif reason == "missing_companies":
+            st.info("📊 **Using cached data** — Apple/Samsung data not found in API response. Showing historical estimates (2019-2023).")
+            st.caption("Verify company names match exactly: 'Apple' and 'Samsung' (case-sensitive).")
+        else:
+            st.info("📊 **Using cached data** — API data unavailable. Showing historical revenue estimates (2019-2023).")
     
     # Ensure data types are correct
     try:
@@ -1207,7 +1236,30 @@ def main():
     st.sidebar.markdown("### API Configuration")
     api_url = get_api_base_url()
     st.sidebar.code(api_url, language=None)
-    st.sidebar.caption("Set `BACKEND_API_URL` env var to change")
+    
+    # Show helpful message based on status
+    if is_using_default_api_url() and is_production_environment():
+        st.sidebar.error("⚠️ **BACKEND_API_URL not set!**")
+        st.sidebar.info("Set `BACKEND_API_URL` environment variable in Render dashboard:\n\n"
+                       "1. Go to dashboard service\n"
+                       "2. Environment tab\n"
+                       "3. Add: `BACKEND_API_URL`\n"
+                       "4. Value: Your backend Render URL")
+    else:
+        st.sidebar.caption("Set `BACKEND_API_URL` env var to change")
+    
+    # Show connection test button
+    if st.sidebar.button("🔍 Test API Connection", key="test_api_connection"):
+        with st.sidebar.spinner("Testing..."):
+            is_available, error_msg = check_api_health()
+            if is_available:
+                st.sidebar.success("✅ API is reachable!")
+            else:
+                st.sidebar.error(f"❌ Connection failed: {error_msg}")
+                st.sidebar.info("**Troubleshooting:**\n"
+                               f"- Verify backend URL: `{api_url}`\n"
+                               "- Check backend service is 'Live' in Render\n"
+                               "- Test backend directly in browser")
     
     # Comparison Charts Section
     st.markdown("---")

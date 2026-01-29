@@ -1,11 +1,13 @@
 services:
   # ============================================
-  # FastAPI Backend (deploy this FIRST)
+  # FastAPI Backend Service
+  # Deploy this FIRST, then update BACKEND_API_URL in dashboard
   # ============================================
   - type: web
     name: smartphone-intelligence-api
     env: docker
     plan: free
+    region: oregon
     dockerfilePath: ./Dockerfile.api
     dockerContext: .
     envVars:
@@ -13,7 +15,10 @@ services:
         value: 8000
       - key: ENVIRONMENT
         value: production
-      # Snowflake credentials - SET THESE IN RENDER DASHBOARD
+      - key: LOG_LEVEL
+        value: INFO
+      # Snowflake credentials - MUST be set in Render Dashboard
+      # Go to: Service → Environment → Add Environment Variable
       - key: SNOWFLAKE_ACCOUNT
         sync: false
       - key: SNOWFLAKE_USER
@@ -32,12 +37,14 @@ services:
     autoDeploy: true
 
   # ============================================
-  # Streamlit Dashboard (deploy AFTER API is live)
+  # Streamlit Dashboard Service
+  # Deploy AFTER backend is live and update BACKEND_API_URL
   # ============================================
   - type: web
     name: smartphone-intelligence-dashboard
     env: docker
     plan: free
+    region: oregon
     dockerfilePath: ./Dockerfile
     dockerContext: .
     envVars:
@@ -45,8 +52,10 @@ services:
         value: 8501
       - key: ENVIRONMENT
         value: production
-      # IMPORTANT: Update this to your deployed API URL after API is live
-      # Example: https://smartphone-intelligence-api.onrender.com
+      - key: LOG_LEVEL
+        value: INFO
+      # CRITICAL: Set this to your backend URL after backend deploys
+      # Format: https://smartphone-intelligence-api.onrender.com
       - key: BACKEND_API_URL
         sync: false
     healthCheckPath: /_stcore/health
