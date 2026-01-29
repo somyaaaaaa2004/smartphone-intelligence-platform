@@ -61,10 +61,79 @@ def get_api_base_url():
     return url.rstrip("/")
 
 
+def check_api_health_with_retry(max_retries=2, delay_seconds=10, initial_timeout=3):
+    """
+    Ping the /health endpoint with retry logic for Render cold starts.
+    Performs retry attempts with delay_seconds between attempts.
+    Note: First attempt should be done separately with quick check.
+    
+    Args:
+        max_retries: Maximum number of retry attempts (default 2, for total of 3 attempts)
+        delay_seconds: Delay between retries in seconds (default 10)
+        initial_timeout: Timeout for retry attempts (default 3, but can be longer for cold starts)
+    
+    Returns:
+        tuple: (is_available: bool, error_message: str or None, retry_count: int)
+    """
+    import time
+    api_url = get_api_base_url()
+    
+    # Use longer timeout for retry attempts (cold starts can take 30+ seconds)
+    retry_timeout = 30
+    
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"API health check retry attempt {attempt + 1}/{max_retries}")
+            response = requests.get(f"{api_url}/health", timeout=retry_timeout)
+            
+            if response.status_code == 200:
+                logger.info(f"API health check succeeded on retry attempt {attempt + 1}")
+                return True, None, attempt + 1
+            
+            # HTTP errors (like 502) might be cold start - retry
+            if attempt < max_retries - 1:
+                logger.info(f"Retry attempt {attempt + 1} failed with HTTP {response.status_code}, waiting {delay_seconds}s before next retry...")
+                time.sleep(delay_seconds)
+                continue
+            else:
+                logger.warning(f"All retry attempts failed. Last error: HTTP {response.status_code}")
+                return False, f"HTTP {response.status_code}", attempt + 1
+                
+        except requests.exceptions.Timeout:
+            if attempt < max_retries - 1:
+                logger.info(f"Retry attempt {attempt + 1} timed out, waiting {delay_seconds}s before next retry...")
+                time.sleep(delay_seconds)
+                continue
+            else:
+                logger.warning(f"All retry attempts timed out")
+                return False, "Timeout after retries", attempt + 1
+                
+        except requests.exceptions.ConnectionError:
+            if attempt < max_retries - 1:
+                logger.info(f"Retry attempt {attempt + 1} connection refused, waiting {delay_seconds}s before next retry...")
+                time.sleep(delay_seconds)
+                continue
+            else:
+                logger.warning(f"All retry attempts failed with connection refused")
+                return False, "Connection refused", attempt + 1
+                
+        except Exception as e:
+            if attempt < max_retries - 1:
+                logger.info(f"Retry attempt {attempt + 1} error: {str(e)[:50]}, waiting {delay_seconds}s before next retry...")
+                time.sleep(delay_seconds)
+                continue
+            else:
+                logger.warning(f"All retry attempts failed with exception: {str(e)[:50]}")
+                return False, str(e)[:50], attempt + 1
+    
+    return False, "All retry attempts failed", max_retries
+
+
 def check_api_health():
     """
     Ping the /health endpoint to check API availability.
     Uses 3-second timeout to avoid blocking page load.
+    For production with retry logic, use check_api_health_with_retry().
     
     Returns:
         tuple: (is_available: bool, error_message: str or None)
@@ -86,9 +155,9 @@ def check_api_health():
 
 def render_api_status_indicator():
     """
-    Render a compact API status indicator.
+    Render a compact API status indicator with retry logic for Render cold starts.
     Non-blocking: uses cached result if available.
-    Shows 'API Available' (green) or 'API Unavailable' (red).
+    Shows 'API Available' (green), 'Waking up backend service...' (info), or 'API Unavailable' (red).
     Warns if using default URL in production.
     """
     api_url = get_api_base_url()
@@ -102,20 +171,69 @@ def render_api_status_indicator():
     
     # Use session state to cache health check result (avoid blocking on every rerun)
     cache_key = "api_health_status"
+    retry_key = "api_health_retry_state"
     
     # Check if we have a cached result (valid for this session)
     if cache_key not in st.session_state:
-        # First load: perform health check
-        is_available, error_msg = check_api_health()
-        st.session_state[cache_key] = {
-            "available": is_available,
-            "error": error_msg
-        }
+        # First load: perform health check with retry logic
+        # For production, use retry logic; for local dev, use quick check
+        if is_prod:
+            # Production: Quick first check, then retry if needed
+            # First attempt: quick check (3 seconds)
+            is_available, error_msg = check_api_health()
+            
+            if not is_available:
+                # First attempt failed - show "waking up" message and retry
+                # This handles Render cold starts (first request can take 30+ seconds)
+                st.session_state[retry_key] = {
+                    "checking": True,
+                    "attempt": 1
+                }
+                
+                # Perform retries with delays (2 more attempts = 3 total)
+                # Show spinner with neutral message during retries
+                with st.spinner("Waking up backend service…"):
+                    is_available, error_msg, retry_count = check_api_health_with_retry(max_retries=2, delay_seconds=10)
+                    # retry_count is number of retries performed (0-2), total attempts = retry_count + 1
+                    # Add 1 for the initial attempt
+                    total_attempts = retry_count + 1
+            else:
+                # First attempt succeeded - no retries needed
+                retry_count = 0
+                total_attempts = 1
+                st.session_state[retry_key] = {
+                    "checking": False,
+                    "attempt": 1
+                }
+            
+            st.session_state[cache_key] = {
+                "available": is_available,
+                "error": error_msg,
+                "retry_count": retry_count,
+                "total_attempts": total_attempts
+            }
+            st.session_state[retry_key]["checking"] = False
+        else:
+            # Local dev: Quick check only (no retries)
+            is_available, error_msg = check_api_health()
+            st.session_state[cache_key] = {
+                "available": is_available,
+                "error": error_msg,
+                "retry_count": 0,
+                "total_attempts": 1
+            }
+            st.session_state[retry_key] = {
+                "checking": False,
+                "attempt": 1
+            }
     
     # Get cached result
     status = st.session_state[cache_key]
     is_available = status["available"]
     error_msg = status.get("error")
+    retry_count = status.get("retry_count", 0)
+    total_attempts = status.get("total_attempts", 1)
+    retry_state = st.session_state.get(retry_key, {"checking": False, "attempt": 1})
     
     # Store API availability in session state for footer
     st.session_state["api_available"] = is_available
@@ -126,23 +244,32 @@ def render_api_status_indicator():
     with col1:
         if is_available:
             st.success("✅ **API Available**")
+        elif retry_state.get("checking", False):
+            # Show neutral message during retry (shouldn't persist after rerun, but handle gracefully)
+            st.info("⏳ **Waking up backend service…**")
+        elif retry_count > 0 and not is_available:
+            # Show error only after all retries failed (3 total attempts)
+            st.error(f"❌ **API Unavailable** — {error_msg or 'Unknown error'}")
         else:
+            # Initial failure (local dev or edge case)
             st.error(f"❌ **API Unavailable** — {error_msg or 'Unknown error'}")
     
     with col2:
         # Refresh button to re-check API status
         if st.button("🔄 Refresh", key="refresh_api_status", help="Re-check API status"):
-            is_available, error_msg = check_api_health()
-            st.session_state[cache_key] = {
-                "available": is_available,
-                "error": error_msg
-            }
-            st.session_state["api_available"] = is_available
+            # Clear cache and retry
+            if cache_key in st.session_state:
+                del st.session_state[cache_key]
+            if retry_key in st.session_state:
+                del st.session_state[retry_key]
             st.rerun()
     
     # Show API URL in caption
     env_indicator = " (default)" if using_default else ""
-    st.caption(f"API: `{api_url}`{env_indicator}")
+    if retry_count > 0 and not is_available:
+        st.caption(f"API: `{api_url}`{env_indicator} — Attempted {total_attempts} times")
+    else:
+        st.caption(f"API: `{api_url}`{env_indicator}")
 
 
 # =============================================================================
@@ -1250,16 +1377,29 @@ def main():
     
     # Show connection test button
     if st.sidebar.button("🔍 Test API Connection", key="test_api_connection"):
-        with st.sidebar.spinner("Testing..."):
-            is_available, error_msg = check_api_health()
-            if is_available:
-                st.sidebar.success("✅ API is reachable!")
-            else:
-                st.sidebar.error(f"❌ Connection failed: {error_msg}")
-                st.sidebar.info("**Troubleshooting:**\n"
-                               f"- Verify backend URL: `{api_url}`\n"
-                               "- Check backend service is 'Live' in Render\n"
-                               "- Test backend directly in browser")
+        is_prod = is_production_environment()
+        if is_prod:
+            # Production: Use retry logic for cold starts
+            with st.sidebar.spinner("Waking up backend service…"):
+                # Quick first check
+                is_available, error_msg = check_api_health()
+                if not is_available:
+                    # Retry if first attempt failed
+                    is_available, error_msg, retry_count = check_api_health_with_retry(max_retries=2, delay_seconds=10)
+        else:
+            # Local dev: Quick check
+            with st.sidebar.spinner("Testing..."):
+                is_available, error_msg = check_api_health()
+        
+        if is_available:
+            st.sidebar.success("✅ API is reachable!")
+        else:
+            st.sidebar.error(f"❌ Connection failed: {error_msg}")
+            st.sidebar.info("**Troubleshooting:**\n"
+                           f"- Verify backend URL: `{api_url}`\n"
+                           "- Check backend service is 'Live' in Render\n"
+                           "- Test backend directly in browser\n"
+                           "- Free tier services may take 30+ seconds to wake up")
     
     # Comparison Charts Section
     st.markdown("---")
