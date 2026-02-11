@@ -5,7 +5,9 @@ A **full-stack quantitative analytics platform** for analyzing **Apple vs Samsun
 🔗 **Live Dashboard:** https://smartphone-intelligence-platform.streamlit.app/  
 🔗 **Backend API (Render):** https://smartphone-intelligence-dashboard.onrender.com/  
 🔗 **GitHub Repo:** https://github.com/somyaaaaaa2004/smartphone-intelligence-platform  
-![Uploading Screenshot 2026-02-11 140150.png…]()
+<p align="center">
+  <img src="assets/dashboard.png" alt="Dashboard Preview" width="1000"/>
+</p>
 
 
 ---
