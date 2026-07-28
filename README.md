@@ -11,12 +11,10 @@ A full-stack analytics project comparing **Apple vs Samsung** performance alongs
 ---
 
 ## 🔑 Key Insights
-<!-- TODO: replace these with your actual findings — this section matters more than the tech stack for analyst roles -->
-- [e.g. "Apple's market share in India grew from X% to Y% between 2015–2024, while Samsung's declined by Z%"]
-- [e.g. "GDP growth in Brazil correlates with a N% increase in premium smartphone revenue share"]
-- [e.g. "ARIMA forecasts project Apple revenue reaching $X by 2029, a Y% CAGR"]
-
-*(Swap these placeholders for 2–3 real numbers pulled from your dashboard — this is the single highest-impact edit you can make to this README.)*
+- **Apple pulled decisively ahead over the decade**: combined Apple+Samsung revenue share shifted from ~57% / 43% in 2015 to ~63% / 37% in 2024, with most of the gap opening up post-2020.
+- **Apple's revenue CAGR (2015–2024) was ~5.9%** vs **Samsung's ~2.7%** — more than double the growth rate over the same period.
+- **Profitability diverged even more than revenue**: Apple's net margin expanded from ~22.8% to ~25.1%, while Samsung's sat at just ~11.6% in 2024 — Apple converts revenue to profit roughly 2x as efficiently.
+- **2021 was an inflection point** for both companies (Apple net income jumped ~71% YoY to $94.7B), likely tied to post-pandemic demand recovery — worth flagging as a discontinuity rather than a trend when forecasting off this data.
 
 ---
 
@@ -33,12 +31,14 @@ This is a learning/portfolio project that builds a small but complete analytics 
 
 ---
 
+
 ## 📊 Data Sources
-<!-- TODO: fill in exactly where the Apple/Samsung financial figures come from — 10-K filings? Macrotrends? Manually compiled? Be specific, since World Bank API only covers macro indicators, not company financials. -->
-- **Company financials (Apple, Samsung)**: [source — e.g. annual reports / Macrotrends / manually compiled CSV]
-- **Macro indicators (GDP, inflation, population)**: World Bank API
+- **Company financials (Apple, Samsung)**: annual revenue and net income compiled from public company annual reports / manually typed from company press release ), loaded via CSV into MySQL then Snowflake
+- **Macro indicators (GDP, inflation, population)**: World Bank API, India and Brazil
 - **Time range**: 2015–2024
 - **Forecast horizon**: 5 years (2025–2029)
+
+*Note: financial figures are annual (not quarterly), so short-term forecasting granularity is limited.*
 
 ---
 
